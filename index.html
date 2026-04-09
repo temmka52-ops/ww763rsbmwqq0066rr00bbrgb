@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>PathFinder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0c0d13;
+  --card:#14151d;
+  --cell-bg:#191b24;
+  --cell-top:#1f2130;
+  --rim:#252836;
+  --accent:#3dffa0;
+  --accent2:#2adb80;
+  --glow:rgba(61,255,160,0.42);
+  --glow2:rgba(61,255,160,0.18);
+  --text:#ffffff;
+  --t2:rgba(255,255,255,0.52);
+  --t3:rgba(255,255,255,0.25);
+  --gold:#d4ff00;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text);
+  -webkit-user-select:none;user-select:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{overscroll-behavior:none}
+#app{display:flex;flex-direction:column;height:100%;max-width:430px;margin:0 auto;position:relative;overflow:hidden}
+
+/* ══════════ TOP NAV ══════════ */
+#topnav{
+  flex-shrink:0;
+  display:flex;justify-content:center;
+  padding-top:calc(10px + var(--safe-top));
+  padding-bottom:2px;
+  z-index:30;
+}
+.nav-pill{
+  display:flex;align-items:center;
+  background:#191b24;
+  border-radius:26px;
+  border:1.5px solid #252836;
+  padding:7px 10px;gap:3px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.55),0 2px 0 rgba(255,255,255,0.03) inset;
+}
+.nav-btn{
+  width:50px;height:50px;border-radius:17px;border:none;
+  background:transparent;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--t2);transition:all 0.2s;position:relative;
+}
+.nav-btn.active{
+  background:linear-gradient(160deg,#252836 0%,#1d1f2a 100%);
+  color:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,0.4),0 1px 0 rgba(255,255,255,0.05) inset;
+}
+/* bomb icon special */
+.nav-btn.bomb-btn{overflow:visible}
+.nav-btn.bomb-btn::after{
+  content:'🔥';
+  position:absolute;top:-4px;right:-4px;
+  font-size:11px;line-height:1;
+}
+.ndiv{width:1px;height:30px;background:rgba(255,255,255,0.07);margin:0 2px}
+
+/* dots */
+#dots{display:flex;justify-content:center;gap:6px;padding:10px 0 6px}
+.dot{width:6px;height:6px;border-radius:50%;background:#252836;transition:all 0.35s}
+.dot.on{background:var(--accent);box-shadow:0 0 10px var(--glow),0 0 3px var(--accent)}
+
+/* ══════════ GRID AREA ══════════ */
+#gridArea{
+  flex:1;
+  overflow:hidden;
+  position:relative;
+  padding:0 12px 8px;
+}
+
+/* the outer rounded card */
+#gridCard {
+  height:100%;
+  border-radius:28px;
+  border:1.5px solid #1e2029;
+  overflow:hidden;
+  position:relative;
+  background:linear-gradient(180deg,#161820 0%,#111319 100%);
+  box-shadow:0 0 0 1px rgba(255,255,255,0.02) inset;
+  
+  /* Добавь это */
+  padding-bottom: 8px;   /* небольшой отступ снизу */
+}
+
+/* ── YOU WIN overlay (inside card, slides down from top) ── */
+#winOverlay{
+  position:absolute;top:0;left:0;right:0;
+  z-index:20;
+  transform:translateY(-100%);
+  transition:transform 0.55s cubic-bezier(0.16,1,0.3,1);
+  padding:18px 16px 14px;
+  background:linear-gradient(180deg,#0d0f12 0%,#12151c 100%);
+  border-bottom:1.5px solid #1e2029;
+}
+#winOverlay.show{transform:translateY(0)}
+.win-monitor{
+  background:linear-gradient(170deg,#181d16 0%,#0c0e0c 100%);
+  border:2px solid #252e22;
+  border-radius:20px;
+  padding:22px 20px 18px;
+  text-align:center;
+  position:relative;overflow:hidden;
+  box-shadow:
+    0 0 80px rgba(61,255,160,0.06),
+    inset 0 0 60px rgba(0,0,0,0.55),
+    inset 0 2px 0 rgba(255,255,255,0.035);
+}
+.win-monitor::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 70%,rgba(61,255,160,0.045) 0%,transparent 65%);
+}
+/* scanlines effect */
+.win-monitor::after{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.07) 3px,rgba(0,0,0,0.07) 4px);
+  pointer-events:none;z-index:1;
+}
+.win-txt{
+  font-size:38px;font-weight:900;letter-spacing:8px;
+  color:var(--accent);position:relative;z-index:2;
+  text-shadow:0 0 18px var(--glow),0 0 50px rgba(61,255,160,0.32),0 0 100px rgba(61,255,160,0.12);
+  animation:wPulse 2s ease-in-out infinite;
+}
+.win-sub-bar{
+  width:52%;height:2.5px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  margin:12px auto 0;position:relative;z-index:2;
+  border-radius:2px;
+  box-shadow:0 0 10px var(--glow);
+}
+#coinRain{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5}
+
+/* ── GRID SCROLL ── */
+#gridScroll {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;                       /* прижимаем к верху */
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 12px 20px;      /* уменьшаем нижний padding */
+  overflow: visible;
+  transition: top 0.55s cubic-bezier(0.4, 0, 0.2, 1);   /* меняем bottom → top */
+}
+#gridContainer{
+  display:flex;flex-direction:column;
+  gap:10px;
+}
+.grid-row{display:flex;gap:10px}
+
+/* ══════════ THE CELL ══════════ */
+.gc{flex:1;position:relative;cursor:default}
+
+/* face plate */
+.gc-face{
+  width:100%;
+  padding-bottom:90%;
+  position:relative;
+  border-radius:24px;
+  overflow:hidden;
+  /* dark material with subtle center spotlight */
+  background:
+    radial-gradient(ellipse at 50% 28%,rgba(255,255,255,0.042) 0%,transparent 55%),
+    linear-gradient(170deg,#1e2130 0%,#181a24 40%,#111320 100%);
+  border:1.5px solid #252837;
+  /* top highlight + bottom shadow inset */
+  box-shadow:
+    0 1.5px 0 rgba(255,255,255,0.065) inset,
+    0 -2px 0 rgba(0,0,0,0.5) inset,
+    0 0 0 1px rgba(255,255,255,0.025) inset;
+  transition:transform 0.13s ease,box-shadow 0.13s ease;
+}
+
+/* bottom inner glow — the "screen" light from below */
+.gc-face::after{
+  content:'';
+  position:absolute;
+  bottom:-6px;left:18%;right:18%;height:38%;
+  border-radius:50%;
+  background:radial-gradient(ellipse,rgba(140,155,200,0.10) 0%,transparent 72%);
+  filter:blur(10px);
+  pointer-events:none;
+}
+
+/* 3-layer bottom edge for the chunky 3D look */
+.gc-edge1{position:absolute;bottom:-7px;left:5px;right:5px;height:11px;
+  background:linear-gradient(180deg,#0f1119 0%,#0c0e16 100%);
+  border:1.5px solid #1c1e2a;border-top:none;
+  border-radius:0 0 20px 20px;z-index:-1}
+.gc-edge2{position:absolute;bottom:-12px;left:8px;right:8px;height:9px;
+  background:#09090f;border-radius:0 0 18px 18px;z-index:-2}
+.gc-shad{position:absolute;bottom:-17px;left:12px;right:12px;height:14px;
+  background:rgba(0,0,0,0.42);filter:blur(8px);border-radius:50%;z-index:-3}
+
+/* CLICKABLE state */
+.gc.clickable .gc-face{
+  cursor:pointer;
+  background:
+    radial-gradient(ellipse at 50% 50%,rgba(255,255,255,0.06) 0%,transparent 55%),
+    linear-gradient(160deg,#222436 0%,#1c1e2c 45%,#14161e 100%);
+  border-color:#2e3044;
+  box-shadow:
+    0 2px 0 rgba(255,255,255,0.09) inset,
+    0 -2px 0 rgba(0,0,0,0.5) inset,
+    0 0 0 1.5px rgba(255,255,255,0.04) inset;
+}
+.gc.clickable .gc-face:active{
+  transform:scale(0.93) translateY(5px);
+  box-shadow:0 3px 10px rgba(0,0,0,0.75) inset !important;
+}
+
+/* SAFE state */
+.gc.safe .gc-face{
+  cursor:default;
+  background:radial-gradient(ellipse at 50% 50%,rgba(61,255,160,0.14) 0%,rgba(0,30,16,0.95) 62%,rgba(0,14,8,1) 100%);
+  border-color:var(--accent);
+  box-shadow:
+    0 0 0 2.5px var(--accent),
+    0 0 28px rgba(61,255,160,0.52),
+    0 0 70px rgba(61,255,160,0.22),
+    inset 0 0 20px rgba(61,255,160,0.08);
+}
+.green-ring{
+  position:absolute;
+  top:14%;left:14%;right:14%;bottom:14%;
+  border-radius:50%;
+  border:4px solid var(--accent);
+  box-shadow:
+    0 0 22px var(--glow),
+    0 0 50px rgba(61,255,160,0.28),
+    inset 0 0 22px rgba(61,255,160,0.14);
+  animation:ringP 2.2s ease-in-out infinite;
+}
+
+/* BOMB state */
+.gc.bomb .gc-face{
+  background:linear-gradient(160deg,#1a1b24 0%,#12131b 100%);
+  border-color:#202230;
+}
+.bomb-inner{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  animation:fadeI 0.35s ease forwards;
+}
+.bomb-inner svg{width:38%;height:38%;opacity:0.35}
+
+/* ══════════ BOTTOM PANEL ══════════ */
+#btm{
+  flex-shrink:0;
+  padding:6px 12px calc(10px + var(--safe-bot));
+  display:flex;flex-direction:column;
+  gap:8px;
+}
+
+/* hint */
+#hintRow{
+  display:flex;align-items:center;justify-content:center;
+  gap:10px;padding:8px 0 6px;
+  font-size:13.5px;color:var(--t2);letter-spacing:0.1px;
+}
+.hint-ply{
+  width:27px;height:27px;background:#1e2029;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text);
+}
+
+/* ── GAME INFO BAR (beautiful redesign) ── */
+#infoBar{
+  display:none;
+  background:linear-gradient(135deg,#161820 0%,#111319 100%);
+  border:1.5px solid #252836;
+  border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,0.4),0 1px 0 rgba(255,255,255,0.03) inset;
+}
+#infoBar.show{display:block}
+
+.ib-top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 16px 10px;
+}
+.ib-left{display:flex;align-items:center;gap:9px}
+.ib-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#2a2c3a,#1e2028);
+  border:1.5px solid #353748;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;
+}
+.ib-name{font-size:14px;font-weight:600;color:var(--t2)}
+.ib-x{font-size:11px;color:var(--t3);margin-left:2px}
+
+.ib-right{text-align:right}
+.ib-big{font-size:26px;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.5px}
+.ib-mult-row{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:3px}
+.ib-mult-cur{
+  font-size:13px;font-weight:700;
+  color:var(--accent);
+  background:rgba(61,255,160,0.1);
+  border:1px solid rgba(61,255,160,0.2);
+  border-radius:8px;padding:2px 8px;
+  box-shadow:0 0 10px rgba(61,255,160,0.12);
+}
+.ib-mult-prev{font-size:12px;color:var(--t3);text-decoration:line-through}
+
+/* gradient divider */
+.ib-divider{
+  height:1px;
+  background:linear-gradient(90deg,transparent,#2a2c3a 30%,#2a2c3a 70%,transparent);
+  margin:0 10px;
+}
+
+.ib-bot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 13px;
+}
+.ib-win-row{display:flex;align-items:center;gap:10px}
+.ib-dice{
+  width:38px;height:38px;background:linear-gradient(135deg,#1e2030,#181a26);
+  border:1.5px solid #2a2c3a;border-radius:13px;
+  display:flex;align-items:center;justify-content:center;font-size:19px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3),0 1px 0 rgba(255,255,255,0.04) inset;
+}
+.ib-win-block{}
+.ib-win-val{
+  font-size:23px;font-weight:900;
+  color:var(--accent);
+  text-shadow:0 0 18px var(--glow);
+  letter-spacing:-0.3px;line-height:1;
+}
+.ib-win-val.gold{color:var(--gold);text-shadow:0 0 18px rgba(212,255,0,0.4)}
+.ib-win-lbl{font-size:10.5px;color:var(--t3);margin-top:3px;letter-spacing:0.3px;text-transform:uppercase}
+
+.ib-cur-btn{
+  width:38px;height:38px;background:linear-gradient(135deg,#1e2030,#181a26);
+  border:1.5px solid #2a2c3a;border-radius:13px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;color:var(--t2);cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3),0 1px 0 rgba(255,255,255,0.04) inset;
+  transition:all 0.18s;border:none;
+}
+.ib-cur-btn:active{transform:scale(0.92)}
+
+/* ── CONTROLS ROW ── */
+#ctrlRow{
+  display:flex;align-items:center;gap:0;
+  background:linear-gradient(135deg,#14151e 0%,#10111a 100%);
+  border:1.5px solid #1e2029;border-radius:18px;
+  overflow:hidden;
+  box-shadow:0 4px 16px rgba(0,0,0,0.38),0 1px 0 rgba(255,255,255,0.025) inset;
+}
+.ctrl-size{
+  padding:0 16px;font-size:15px;font-weight:800;color:var(--text);
+  cursor:pointer;white-space:nowrap;border:none;background:transparent;
+  flex-shrink:0;height:56px;display:flex;align-items:center;
+  border-right:1.5px solid #1e2029;
+}
+.ctrl-sep{width:1.5px;height:56px;background:#1e2029;flex-shrink:0}
+.ctrl-bet-btn{
+  width:46px;height:56px;background:transparent;border:none;
+  font-size:27px;color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;line-height:1;transition:opacity 0.15s;
+}
+.ctrl-bet-btn:active{opacity:0.45}
+.ctrl-info{flex:1;text-align:center;padding:4px 0}
+.ctrl-main{font-size:17px;font-weight:800;color:#fff}
+.ctrl-sub{font-size:10px;color:var(--t3);margin-top:3px;letter-spacing:0.2px}
+.ctrl-play{
+  flex-shrink:0;width:58px;height:56px;
+  background:linear-gradient(135deg,#1e2a20,#141c16);
+  border:none;border-left:1.5px solid #1e2029;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.18s;position:relative;overflow:hidden;
+}
+.ctrl-play::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(61,255,160,0.1) 0%,transparent 60%);
+}
+.ctrl-play:active{opacity:0.75;transform:scale(0.97)}
+.ctrl-play .parr{
+  width:0;height:0;border-style:solid;
+  border-width:10px 0 10px 18px;
+  border-color:transparent transparent transparent var(--accent);
+  margin-left:4px;position:relative;z-index:1;
+  filter:drop-shadow(0 0 6px var(--glow));
+}
+.ctrl-play.cashout{background:linear-gradient(135deg,#2a1e10,#1c1410)}
+.ctrl-play.cashout .parr{border-color:transparent transparent transparent #ffb84d;filter:drop-shadow(0 0 6px rgba(255,184,77,0.5))}
+.ctrl-play.newgame{background:linear-gradient(135deg,#1a1e2a,#12141e)}
+.ctrl-play.newgame .parr{border-color:transparent transparent transparent #8888aa}
+
+/* size popup */
+#sPopup{
+  display:none;position:absolute;bottom:calc(100% + 10px);left:12px;
+  background:#161820;border:1.5px solid #252836;border-radius:18px;
+  padding:8px;flex-direction:column;gap:4px;z-index:200;
+  box-shadow:0 -12px 36px rgba(0,0,0,0.65);
+}
+#sPopup.on{display:flex}
+.sopt{
+  padding:10px 28px;border-radius:11px;
+  font-size:14px;font-weight:700;color:var(--t2);cursor:pointer;text-align:center;
+  transition:all 0.15s;
+}
+.sopt:active,.sopt.active{background:#252836;color:#fff}
+
+/* ══════════ ANIMATIONS ══════════ */
+@keyframes wPulse{
+  0%,100%{text-shadow:0 0 18px var(--glow),0 0 50px rgba(61,255,160,0.32),0 0 100px rgba(61,255,160,0.1)}
+  50%{text-shadow:0 0 35px var(--glow),0 0 80px rgba(61,255,160,0.5),0 0 140px rgba(61,255,160,0.18)}
+}
+@keyframes ringP{
+  0%,100%{box-shadow:0 0 22px var(--glow),0 0 50px rgba(61,255,160,0.28),inset 0 0 22px rgba(61,255,160,0.12)}
+  50%{box-shadow:0 0 38px var(--glow),0 0 80px rgba(61,255,160,0.48),inset 0 0 36px rgba(61,255,160,0.22)}
+}
+@keyframes safeIn{0%{transform:scale(0.45);opacity:0}58%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes fadeI{0%{opacity:0}100%{opacity:1}}
+@keyframes coinFall{
+  0%{transform:translateY(-40px) rotate(0deg) scale(1);opacity:1}
+  80%{opacity:1}100%{transform:translateY(320px) rotate(600deg) scale(0.5);opacity:0}
+}
+@keyframes slideUp{
+  from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}
+}
+@keyframes ibIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- TOP NAV -->
+<div id="topnav">
+  <div class="nav-pill">
+    <button class="nav-btn active">⊞</button>
+    <div class="ndiv"></div>
+    <button class="nav-btn bomb-btn">💣</button>
+    <div class="ndiv"></div>
+    <button class="nav-btn">♪</button>
+  </div>
+</div>
+
+<!-- DOTS -->
+<div id="dots">
+  <div class="dot on"></div>
+  <div class="dot"></div>
+  <div class="dot"></div>
+</div>
+
+<!-- GRID AREA -->
+<div id="gridArea">
+  <div id="gridCard">
+
+    <!-- YOU WIN overlay -->
+    <div id="winOverlay">
+      <div class="win-monitor">
+        <div class="win-txt">ПОБЕДА</div>
+        <div class="win-sub-bar"></div>
+        <div id="coinRain"></div>
+      </div>
+    </div>
+
+    <!-- Scrollable grid — anchored to bottom, slides up -->
+    <div id="gridScroll">
+      <div id="gridContainer"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOTTOM PANEL -->
+<div id="btm" style="position:relative">
+
+  <!-- size popup -->
+  <div id="sPopup">
+    <div class="sopt active" data-s="2x3">2×3</div>
+    <div class="sopt" data-s="3x6">3×6</div>
+    <div class="sopt" data-s="4x9">4×9</div>
+    <div class="sopt" data-s="5x12">5×12</div>
+    <div class="sopt" data-s="6x15">6×15</div>
+  </div>
+
+  <!-- hint -->
+  <div id="hintRow">
+    <span>Выбери сумму ставки и нажми</span>
+    <div class="hint-ply">▶</div>
+  </div>
+
+  <!-- info bar -->
+  <div id="infoBar">
+    <div class="ib-top">
+      <div class="ib-left">
+        <div class="ib-avatar">⬡</div>
+        <span class="ib-name">Hash</span>
+        <span class="ib-x">×</span>
+      </div>
+      <div class="ib-right">
+        <div class="ib-big" id="ibBig">0</div>
+        <div class="ib-mult-row">
+          <span class="ib-mult-prev" id="ibPrev">1.00x</span>
+          <span class="ib-mult-cur" id="ibCur">2.00x</span>
+        </div>
+      </div>
+    </div>
+    <div class="ib-divider"></div>
+    <div class="ib-bot">
+      <div class="ib-win-row">
+        <div class="ib-dice">🎲</div>
+        <div class="ib-win-block">
+          <div class="ib-win-val" id="ibWin">0 RUB</div>
+          <div class="ib-win-lbl">Общий выигрыш</div>
+        </div>
+      </div>
+      <button class="ib-cur-btn" id="ibCurBtn">$</button>
+    </div>
+  </div>
+
+  <!-- controls -->
+  <div id="ctrlRow">
+    <button class="ctrl-size" id="sizeBtn">2×3</button>
+    <button class="ctrl-bet-btn" id="bMinus">−</button>
+    <div class="ctrl-info">
+      <div class="ctrl-main" id="betMain">2000 RUB</div>
+      <div class="ctrl-sub" id="betSub">баланс: 70 990,87 RUB</div>
+    </div>
+    <button class="ctrl-bet-btn" id="bPlus">+</button>
+    <div class="ctrl-sep"></div>
+    <button class="ctrl-play" id="playBtn"><div class="parr"></div></button>
+  </div>
+
+</div>
+</div><!-- #app -->
+
+<script>
+/* ════════════ GAME ENGINE ════════════ */
+const G = {
+  state: 'idle', cols: 2, rows: 3,
+  currentRow: 0,
+  multipliers: [],
+  bet: 2000,
+  balance: 70990.87,
+  totalWin: 0,
+  currentMult: 1,
+  prevMult: 1,
+  usd: false,
+
+  setSize(s) {
+    const [c, r] = s.split('x').map(Number);
+    this.cols = c; this.rows = r;
+    this.buildMults();
+  },
+  buildMults() {
+    const f = this.cols <= 2 ? 1.9 : this.cols === 3 ? 2.0 : this.cols === 4 ? 2.2 : this.cols === 5 ? 2.5 : 2.8;
+    this.multipliers = []; let v = 1.0;
+    for (let i = 0; i <= this.rows; i++) { this.multipliers.push(parseFloat(v.toFixed(2))); v *= f; }
+  },
+  start() {
+    this.state = 'playing'; this.currentRow = 0;
+    this.totalWin = 0; this.currentMult = this.multipliers[0]; this.prevMult = 1;
+  },
+  click(row, col) {
+    if (this.state !== 'playing' || row !== this.currentRow) return null;
+    this.prevMult = this.currentMult;
+    this.currentRow++;
+    const m = this.multipliers[this.currentRow];
+    this.currentMult = m;
+    this.totalWin = this.bet * m;
+    const done = this.currentRow >= this.rows;
+    if (done) { this.balance += this.totalWin; this.state = 'won'; }
+    return { row, col, mult: m, win: this.totalWin, done };
+  },
+  cashOut() {
+    if (this.state !== 'playing' || this.currentRow === 0) return null;
+    const m = this.multipliers[this.currentRow];
+    const w = this.bet * m;
+    this.balance += w; this.state = 'won';
+    this.totalWin = w; this.currentMult = m;
+    return { win: w, mult: m };
+  },
+  step() { const b = this.bet; if (b < 500) return 50; if (b < 2000) return 100; if (b < 10000) return 500; return 1000; },
+  setBet(v) { if (this.state === 'playing') return; this.bet = Math.max(50, Math.min(v, 500000)); },
+  fmt(n) {
+    if (this.usd) return '$' + (n / 90).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return Math.round(n).toLocaleString('ru-RU') + ' RUB';
+  }
+};
+G.setSize('2x3');
+
+/* ════════════ DOM refs ════════════ */
+const gc = document.getElementById('gridContainer');
+const gridScroll = document.getElementById('gridScroll');
+const gridCard = document.getElementById('gridCard');
+const winOverlay = document.getElementById('winOverlay');
+const infoBar = document.getElementById('infoBar');
+const hintRow = document.getElementById('hintRow');
+const playBtn = document.getElementById('playBtn');
+const coinRain = document.getElementById('coinRain');
+const sPopup = document.getElementById('sPopup');
+const sizeBtn = document.getElementById('sizeBtn');
+
+let cellMap = []; // [row][col] → {wrapper, face}
+let curSize = '2x3';
+
+/* ════════════ RENDER GRID ════════════ */
+function renderGrid() {
+  gc.innerHTML = ''; 
+  cellMap = [];
+
+  for (let row = G.rows - 1; row >= 0; row--) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'grid-row';
+    const arr = [];
+
+    for (let col = 0; col < G.cols; col++) {
+      const w = document.createElement('div'); w.className = 'gc';
+      const face = document.createElement('div'); face.className = 'gc-face';
+      const e1 = document.createElement('div'); e1.className = 'gc-edge1';
+      const e2 = document.createElement('div'); e2.className = 'gc-edge2';
+      const sh = document.createElement('div'); sh.className = 'gc-shad';
+      w.appendChild(face); w.appendChild(e1); w.appendChild(e2); w.appendChild(sh);
+      arr.push({ wrapper: w, face });
+      rowEl.appendChild(w);
+    }
+
+    cellMap[row] = arr;
+    gc.appendChild(rowEl);
+  }
+
+  renderDots();           // ← добавили
+  resetScrollPos();       // ← теперь с правильной позицией
+}
+
+/* ════════════ SCROLL POSITION — ФИНАЛЬНАЯ ВЕРСИЯ (все ряды видны в начале) ════════════ */
+/* ════════════ SCROLL POSITION — РАБОЧАЯ ВЕРСИЯ (все ряды видны в начале) ════════════ */
+let rowHeight = 0;
+
+function calcRowHeight() {
+    const firstRow = gc.querySelector('.grid-row');
+    if (!firstRow) return 96;
+    return Math.round(firstRow.getBoundingClientRect().height + 10);
+}
+
+function resetScrollPos() {
+    if (rowHeight === 0) rowHeight = calcRowHeight();
+    
+    gridScroll.style.bottom = '0px';
+    gridScroll.style.transition = 'none';
+}
+
+function scrollDownOneRow() {
+    if (rowHeight === 0) rowHeight = calcRowHeight();
+
+    const curBot = parseInt(gridScroll.style.bottom) || 0;
+    let newBot = curBot - rowHeight;
+
+    if (newBot < 0) newBot = 0;
+
+    gridScroll.style.transition = 'bottom 0.55s cubic-bezier(0.4,0,0.2,1)';
+    gridScroll.style.bottom = newBot + 'px';
+}
+/* ════════════ DYNAMIC DOTS (огоньки) ════════════ */
+function renderDots() {
+  const dotsContainer = document.getElementById('dots');
+  dotsContainer.innerHTML = '';
+
+  for (let i = 0; i < G.rows; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dotsContainer.appendChild(dot);
+  }
+}
+
+function updateDots() {
+  const dots = document.querySelectorAll('#dots .dot');
+  dots.forEach((dot, i) => {
+    if (i < G.currentRow) {
+      dot.classList.add('on');
+    } else {
+      dot.classList.remove('on');
+    }
+  });
+}
+
+/* ════════════ IMPROVED SCROLL DOWN (с остановкой в конце) ════════════ */
+function resetScrollPos() {
+    if (rowHeight === 0) rowHeight = calcRowHeight();
+    
+    // Важно! В начале игры поле полностью поднято наверх (видны все ряды)
+    const totalExtraHeight = (G.rows - 1) * rowHeight;   // смещение для видимости
+    gridScroll.style.bottom = `-${totalExtraHeight}px`;
+    gridScroll.style.transition = 'none';
+}
+
+function scrollDownOneRow() {
+  if (rowHeight === 0) rowHeight = calcRowHeight();
+
+  const curBot = parseInt(gridScroll.style.bottom) || 0;
+  const maxDown = - (G.rows * rowHeight);           // максимальное смещение вниз
+
+  let newBot = curBot - rowHeight;
+
+  // ← ЗАЩИТА ОТ ПЕРЕСКОЛЛА
+  if (newBot < maxDown) newBot = maxDown;
+
+  gridScroll.style.transition = 'bottom 0.52s cubic-bezier(0.4,0,0.2,1)';
+  gridScroll.style.bottom = newBot + 'px';
+}
+
+/* ════════════ APPLY ROW STATES ════════════ */
+function applyStates() {
+  for (let r = 0; r < G.rows; r++) {
+    if (!cellMap[r]) continue;
+    cellMap[r].forEach(({ wrapper, face }, col) => {
+      wrapper.classList.remove('clickable', 'safe', 'bomb');
+      const nf = face.cloneNode(true);
+      face.parentNode.replaceChild(nf, face);
+      cellMap[r][col].face = nf;
+
+      if (r === G.currentRow) {
+        wrapper.classList.add('clickable');
+        nf.addEventListener('click', () => doClick(r, col));
+        nf.addEventListener('touchstart', () => { nf.style.transform = 'scale(0.92) translateY(5px)'; }, { passive: true });
+        nf.addEventListener('touchend', () => { nf.style.transform = ''; }, { passive: true });
+      }
+    });
+  }
+}
+
+/* ════════════ CELL CLICK ════════════ */
+function doClick(row, col) {
+  if (G.state !== 'playing' || row !== G.currentRow) return;
+
+  // Remove clickable from all in this row immediately
+  cellMap[row].forEach(({ wrapper }) => wrapper.classList.remove('clickable'));
+
+  const res = G.click(row, col);
+  if (!res) return;
+
+  // Mark clicked cell as safe
+  makeSafe(row, col);
+  burst(cellMap[row][col].wrapper);
+  if (navigator.vibrate) navigator.vibrate(35);
+
+  updateInfoBar();
+
+  if (res.done) {
+      scrollDownOneRow();
+      updateDots();           // ← зажигаем последний огонёк
+      setTimeout(showWin, 580);
+  } else {
+      scrollDownOneRow();
+      updateDots();           // ← зажигаем очередной огонёк
+      setTimeout(applyStates, 400);
+  }
+}
+
+function makeSafe(row, col) {
+  const { wrapper, face } = cellMap[row][col];
+  wrapper.classList.remove('clickable'); wrapper.classList.add('safe');
+  const ring = document.createElement('div'); ring.className = 'green-ring';
+  ring.style.animation = 'safeIn 0.4s cubic-bezier(0.16,1,0.3,1) forwards, ringP 2.2s ease-in-out 0.4s infinite';
+  face.appendChild(ring);
+}
+
+function makeBomb(row, col) {
+  const { wrapper, face } = cellMap[row][col];
+  wrapper.classList.add('bomb');
+  const bi = document.createElement('div'); bi.className = 'bomb-inner';
+  bi.innerHTML = `<svg viewBox="0 0 40 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="25" r="13" stroke="rgba(255,255,255,0.38)" stroke-width="2.2"/>
+    <line x1="20" y1="12" x2="20" y2="7" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-linecap="round"/>
+    <path d="M21.5 7.5 Q26 2.5 31 5" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <circle cx="15" cy="21" r="3" fill="rgba(255,255,255,0.11)"/>
+  </svg>`;
+  face.appendChild(bi);
+}
+
+/* ════════════ WIN ════════════ */
+function showWin() {
+  winOverlay.classList.add('show');
+  startCoins();
+  if (navigator.vibrate) navigator.vibrate([60, 50, 110, 55, 220]);
+
+  // update play btn
+  playBtn.querySelector('.parr').style.display = 'none';
+  const lbl = document.createElement('span');
+  lbl.textContent = 'NEW';
+  lbl.style.cssText = 'font-size:10px;font-weight:900;color:rgba(255,255,255,0.5);letter-spacing:0.5px';
+  playBtn.appendChild(lbl);
+  playBtn.className = 'ctrl-play newgame';
+
+  // gold win value
+  document.getElementById('ibWin').classList.add('gold');
+  updateInfoBar();
+}
+
+function startCoins() {
+  coinRain.innerHTML = '';
+  const ic = ['🪙', '💰', '💎', '✨', '⭐'];
+  for (let i = 0; i < 26; i++) {
+    setTimeout(() => {
+      const c = document.createElement('span');
+      c.style.cssText = `position:absolute;left:${Math.random() * 100}%;top:-30px;font-size:${12 + Math.random() * 18}px;animation:coinFall ${1.5 + Math.random() * 2.5}s linear forwards`;
+      c.textContent = ic[Math.floor(Math.random() * ic.length)];
+      coinRain.appendChild(c);
+      setTimeout(() => c.remove(), 5000);
+    }, i * 110);
+  }
+}
+
+/* ════════════ INFO BAR ════════════ */
+function updateInfoBar() {
+  const win = G.totalWin;
+  document.getElementById('ibBig').textContent = Math.round(G.bet * G.currentMult).toLocaleString('ru-RU');
+  document.getElementById('ibCur').textContent = G.currentMult.toFixed(2) + 'x';
+  document.getElementById('ibPrev').textContent = G.prevMult.toFixed(2) + 'x';
+  document.getElementById('ibWin').textContent = G.fmt(win);
+}
+
+/* ════════════ PARTICLES ════════════ */
+function burst(el) {
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const col = '#3dffa0';
+  for (let i = 0; i < 14; i++) {
+    const p = document.createElement('div');
+    p.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:6px;height:6px;background:${col};border-radius:50%;pointer-events:none;z-index:9999;box-shadow:0 0 7px ${col}`;
+    document.body.appendChild(p);
+    const a = (Math.PI * 2 / 14) * i, d = 30 + Math.random() * 30;
+    p.animate([
+      { transform: 'translate(-50%,-50%) scale(1.2)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${Math.cos(a) * d}px),calc(-50% + ${Math.sin(a) * d}px)) scale(0)`, opacity: 0 }
+    ], { duration: 520 + Math.random() * 140, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'forwards' }).onfinish = () => p.remove();
+  }
+}
+
+/* ════════════ PLAY BUTTON ════════════ */
+playBtn.addEventListener('click', () => {
+  if (G.state === 'idle') {
+    G.start();
+    rowHeight = 0; // recalc
+    hintRow.style.display = 'none';
+    infoBar.classList.add('show');
+    infoBar.style.animation = 'ibIn 0.35s ease';
+    applyStates();
+    updateInfoBar();
+    playBtn.className = 'ctrl-play cashout';
+
+  } else if (G.state === 'playing' && G.currentRow > 0) {
+    const res = G.cashOut();
+    if (res) { updateInfoBar(); showWin(); }
+
+  } else if (G.state === 'won') {
+    reset();
+  }
+});
+
+/* ════════════ RESET ════════════ */
+function reset() {
+  G.state = 'idle'; 
+  G.currentRow = 0; 
+  G.totalWin = 0; 
+  G.currentMult = 1; 
+  G.prevMult = 1;
+
+  winOverlay.classList.remove('show');
+  coinRain.innerHTML = '';
+  infoBar.classList.remove('show');
+  document.getElementById('ibWin').classList.remove('gold');
+  hintRow.style.display = 'flex';
+
+  playBtn.innerHTML = '<div class="parr"></div>';
+  playBtn.className = 'ctrl-play';
+
+  G.setSize(curSize);
+  renderGrid();           // ← теперь пересоздаёт и огоньки
+  updateDots();           // ← сбрасывает все огоньки
+  updateUI();
+}
+
+/* ════════════ BET ════════════ */
+document.getElementById('bMinus').addEventListener('click', () => { G.setBet(G.bet - G.step()); updateUI(); });
+document.getElementById('bPlus').addEventListener('click', () => { G.setBet(G.bet + G.step()); updateUI(); });
+
+let bTmr;
+[document.getElementById('bMinus'), document.getElementById('bPlus')].forEach((btn, i) => {
+  const d = i === 0 ? -1 : 1;
+  btn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    G.setBet(G.bet + d * G.step()); updateUI();
+    bTmr = setTimeout(() => { btn._iv = setInterval(() => { G.setBet(G.bet + d * G.step()); updateUI(); }, 110); }, 380);
+  }, { passive: false });
+  const stop = () => { clearTimeout(bTmr); clearInterval(btn._iv); };
+  btn.addEventListener('touchend', stop); btn.addEventListener('touchcancel', stop);
+});
+
+/* ════════════ SIZE ════════════ */
+sizeBtn.addEventListener('click', e => { e.stopPropagation(); sPopup.classList.toggle('on'); });
+document.addEventListener('click', () => sPopup.classList.remove('on'));
+sPopup.querySelectorAll('.sopt').forEach(opt => {
+  opt.addEventListener('click', e => {
+    e.stopPropagation();
+    if (G.state === 'playing') return;
+    sPopup.querySelectorAll('.sopt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    curSize = opt.dataset.s;
+    sizeBtn.textContent = opt.textContent;
+    sPopup.classList.remove('on');
+    G.setSize(curSize);
+    renderGrid(); updateUI();
+  });
+});
+
+/* ════════════ CURRENCY TOGGLE ════════════ */
+document.getElementById('ibCurBtn').addEventListener('click', () => {
+  G.usd = !G.usd;
+  document.getElementById('ibCurBtn').textContent = G.usd ? '₽' : '$';
+  updateInfoBar();
+  updateUI();
+});
+
+/* ════════════ UI ════════════ */
+function updateUI() {
+  document.getElementById('betMain').textContent = Math.round(G.bet).toLocaleString('ru-RU') + ' RUB';
+  const bal = G.usd
+    ? 'balance: $' + Math.round(G.balance / 90).toLocaleString('en-US')
+    : 'баланс: ' + G.balance.toFixed(2).replace('.', ',') + ' RUB';
+  document.getElementById('betSub').textContent = bal;
+}
+
+/* ════════════ TOUCH GUARDS ════════════ */
+document.body.addEventListener('touchmove', e => {
+  if (e.target.closest('#gridArea')) return;
+  e.preventDefault();
+}, { passive: false });
+
+let lt = 0;
+document.addEventListener('touchend', e => {
+  const n = Date.now(); if (n - lt < 300) e.preventDefault(); lt = n;
+}, { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+
+/* ════════════ BOOT ════════════ */
+renderGrid();
+updateUI();
+renderDots();
+</script>
+</body>
+</html>
